@@ -2,6 +2,7 @@
 
 > **⚠️ Форк.** Это форк [nixys/nxs-backup](https://github.com/nixys/nxs-backup), созданный 2026-08-03.
 > Пока используется только для личных нужд, изменения вносятся понемногу и без гарантий совместимости с оригиналом.
+> ну и да, это ~~нейрослоп~~ код сгенерированный нейросетями, где я и где этот ваш Go
 
 nxs-backup is a tool for creating and delivery backups, rotating it locally and on remote storages, compatible with
 GNU/Linux distributions.
