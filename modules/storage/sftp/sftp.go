@@ -359,7 +359,9 @@ func (s *SFTP) deleteIncBackup(logCh chan logger.LogRecord, jobName, ofsPart str
 
 	if full {
 		backupDir := path.Join(s.backupPath, ofsPart)
-		if err := s.client.Remove(backupDir); err != nil {
+		// `Remove` is not recursive: for a directory it falls back to rmdir,
+		// which fails with "Directory is not empty" on non-empty backup dirs
+		if err := s.client.RemoveAll(backupDir); err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				logCh <- logger.Log(jobName, s.name).Debugf("Directory '%s' not exist. Skipping delete.", backupDir)
 				return nil
@@ -397,7 +399,7 @@ func (s *SFTP) deleteIncBackup(logCh chan logger.LogRecord, jobName, ofsPart str
 				dirParts := strings.Split(dirName, "_")
 				dirMonth, _ := strconv.Atoi(dirParts[1])
 				if dirMonth < lastMonth {
-					if err = s.client.Remove(path.Join(backupDir, dirName)); err != nil {
+					if err = s.client.RemoveAll(path.Join(backupDir, dirName)); err != nil {
 						logCh <- logger.Log(jobName, s.name).Errorf("Failed to delete '%s' in dir '%s' with next error: %s",
 							dirName, backupDir, err)
 						errs = multierror.Append(errs, err)
