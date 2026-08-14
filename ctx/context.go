@@ -24,6 +24,8 @@ import (
 	"github.com/nixys/nxs-backup/modules/cmd_handler/test_config"
 	"github.com/nixys/nxs-backup/modules/logger"
 	"github.com/nixys/nxs-backup/modules/metrics"
+	"github.com/nixys/nxs-backup/modules/notifier/heartbeat"
+	"github.com/nixys/nxs-backup/modules/report"
 )
 
 // Ctx defines application custom context
@@ -44,6 +46,8 @@ type app struct {
 	extJobs     interfaces.Jobs
 	initErrs    *multierror.Error
 	metricsData *metrics.Data
+	report      *report.Report
+	heartbeats  *heartbeat.Heartbeats
 	serverBind  string
 }
 
@@ -133,6 +137,8 @@ func AppCtxInit() (any, error) {
 				DBJobs:      a.dbJobs,
 				ExtJobs:     a.extJobs,
 				MetricsData: a.metricsData,
+				Report:      a.report,
+				Heartbeats:  a.heartbeats,
 			},
 		)
 	case server:
@@ -211,6 +217,16 @@ func appInit(c *Ctx, cfgPath string) (app, error) {
 
 	// Notifications init
 	if err = notifiersInit(c, conf); err != nil {
+		a.initErrs = multierror.Append(a.initErrs, err.(*multierror.Error).WrappedErrors()...)
+	}
+
+	// Final report init
+	if a.report, err = reportInit(conf); err != nil {
+		a.initErrs = multierror.Append(a.initErrs, err)
+	}
+
+	// Heartbeats init
+	if a.heartbeats, err = heartbeatsInit(conf); err != nil {
 		a.initErrs = multierror.Append(a.initErrs, err.(*multierror.Error).WrappedErrors()...)
 	}
 
