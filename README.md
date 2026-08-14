@@ -4,6 +4,26 @@
 > Пока используется только для личных нужд, изменения вносятся понемногу и без гарантий совместимости с оригиналом.
 > ну и да, это ~~нейрослоп~~ код сгенерированный нейросетями, где я и где этот ваш Go
 
+## Что изменено в форке
+
+**Новое:**
+
+- **Итоговый отчёт в Telegram** — одно сообщение по завершении всего прогона: результаты джоб, размер
+  созданных бэкапов и насколько они выросли с прошлого раза. Детали каждой джобы спрятаны под сворачиваемую
+  цитату, ошибки собраны в отдельный блок. Опционально, настраивается чат и тред. Подробнее — [Final report](#final-report).
+- **Heartbeat-пинги** — дёргает вебхуки внешних мониторингов (push-мониторы Uptime Kuma, healthchecks.io и
+  подобные), которые поднимают тревогу, если их не позвать раз в N времени. Так алерт сработает и когда бэкап
+  не запустился вовсе. Можно привязывать к конкретным джобам. Подробнее — [Heartbeats](#heartbeats).
+
+**Исправления:**
+
+- **Redis: бэкап не работал при заданном пароле** — проверка подключения выполнялась без авторизации, и джоба
+  падала с `NOAUTH` ещё на старте.
+- **SFTP: мусор от инкрементных бэкапов при ротации** — устаревшие каталоги не удалялись, потому что удаление
+  было нерекурсивным и спотыкалось о непустые директории. Остальные хранилища этим не страдали.
+
+Для локальной сборки в Docker (Go-тулчейн на машине не нужен) — см. [CLAUDE.md](CLAUDE.md).
+
 nxs-backup is a tool for creating and delivery backups, rotating it locally and on remote storages, compatible with
 GNU/Linux distributions.
 
@@ -35,6 +55,8 @@ GNU/Linux distributions.
   - WebDAV
 - Fine-tune the database backup process with additional options for optimization purposes
 - Notifications about events of the backup process via email and webhooks
+- Optional final report with jobs results and backups size statistics sent to Telegram (see [below](#final-report))
+- Heartbeats for the external "dead man's switch" monitorings, e.g. push monitors of the Uptime Kuma (see [below](#heartbeats))
 - Collect, export, and save metrics in Prometheus-compatible format
 - Limiting resource consumption:
   - CPU usage
@@ -111,6 +133,97 @@ GNU/Linux distributions.
   helm -n $NAMESPACE_SERVICE_NAME install nxs-backup nixys/nxs-universal-chart -f values.yaml
   ```
   where $NAMESPACE_SERVICE_NAME is the namespace in which to back up your data
+
+## Final report
+
+In addition to the per-event notifications, nxs-backup can send a single summary message when the whole
+`nxs-backup start` run is finished. The report contains the results of the performed jobs and, when the data is
+available, the size of the created backups and how much they have grown since the previous run.
+
+The report is disabled by default and is delivered to the only channel — a Telegram chat. The message is formatted
+with MarkdownV2, so the details of every job are hidden under an expandable block quotation. If Telegram is unable to
+parse the markup, the message is resent as a plain text. Messages that are longer than the Telegram limit are split
+by the job boundaries.
+
+Add the `report` section to the `notifications` block of the main config:
+
+```yaml
+notifications:
+  report:
+    # send the final report, disabled by default
+    enabled: true
+    # send the report only if the run finished with errors
+    only_on_errors: false
+    # include the per-target details (size, growth, duration, delivery status)
+    include_targets: true
+    # sizes of the previous run backups are stored here to calculate the growth
+    state_file: /var/lib/nxs-backup/report.state
+    telegram:
+      bot_token: 'ENV:TG_BOT_TOKEN'
+      # numeric chat id or `@channelname`
+      chat_id: '-1001234567890'
+      # optional, id of the topic in a forum supergroup
+      thread_id: 42
+      # optional, defaults
+      api_url: https://api.telegram.org
+      insecure_tls: false
+      disable_notification: false
+```
+
+Notes:
+
+- The report doesn't depend on the `server.metrics` settings, it always uses the data collected during the run.
+- The backups growth is calculated per target against the last **successful** backup of that target. It's not shown
+  until the second run, or if the `state_file` can't be read or written.
+- The reported size is the size of the backups created by this run, not the total amount of the data stored
+  on the remote storages.
+
+## Heartbeats
+
+Monitorings like the Uptime Kuma push monitors, healthchecks.io or Cronitor work the other way around: they give you
+an URL that your job has to call on every run, and raise an alert if the call doesn't come in the expected period of
+time. So the alert fires not only when the backup fails, but also when it hasn't been started at all — the cron is
+broken, the host is down, the process hangs.
+
+nxs-backup pings such URLs when the `nxs-backup start` run is finished:
+
+```yaml
+notifications:
+  heartbeats:
+  - name: kuma
+    enabled: true
+    # pinged when the run is finished
+    url: https://kuma.example.com/api/push/abc123
+    # when to ping the `url`: always (default) | success | failure
+    trigger: always
+    # optional, pinged instead of the `url` when the run failed (e.g. healthchecks.io `/fail`).
+    # It's used regardless of the `trigger`
+    failure_url: ''
+    # optional, pinged right after the backup is started (e.g. healthchecks.io `/start`)
+    start_url: ''
+    # optional, report only about the certain jobs instead of the whole run
+    jobs: []
+    # optional, defaults
+    method: GET
+    status_params: true
+    insecure_tls: false
+    connection_timeout: 10
+    extra_headers: {}
+```
+
+With `status_params: true` (default) the `status=up|down`, `msg=<summary>` and `ping=<duration in ms>` query params
+are added to the pinged URL — that's what the Uptime Kuma push monitor expects. Params that are already present in the
+configured URL are never overwritten, and services that don't know these params (healthchecks.io) just ignore them.
+Set it to `false` to ping the URL exactly as it's written in the config.
+
+Notes:
+
+- A failed ping is retried 3 times, so a short network glitch doesn't raise a false alarm.
+- `jobs` binds the heartbeat to the certain jobs: the status is calculated from their results only. If none of them
+  has been performed during the run (a different job was started, or today is not a backup day for them),
+  the heartbeat is not pinged at all — the monitoring interval has to be set with that in mind.
+- Set `trigger: success` to get the classic dead man's switch behaviour: a failed run pings nothing and the alert
+  fires by the monitoring timeout.
 
 ## Documentation
 

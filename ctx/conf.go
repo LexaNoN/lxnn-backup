@@ -49,8 +49,44 @@ type metricsConf struct {
 }
 
 type notificationsConf struct {
-	Mail     mailConf      `conf:"mail"`
-	Webhooks []webhookConf `conf:"webhooks"`
+	Mail       mailConf        `conf:"mail"`
+	Webhooks   []webhookConf   `conf:"webhooks"`
+	Report     reportConf      `conf:"report"`
+	Heartbeats []heartbeatConf `conf:"heartbeats"`
+}
+
+// heartbeatConf describes the external monitoring that raises an alert
+// if nxs-backup doesn't ping it in the expected period of time
+type heartbeatConf struct {
+	Enabled           bool              `conf:"enabled" conf_extraopts:"default=true"`
+	Name              string            `conf:"name"`
+	URL               string            `conf:"url" conf_extraopts:"required"`
+	FailureURL        string            `conf:"failure_url"`
+	StartURL          string            `conf:"start_url"`
+	Trigger           string            `conf:"trigger" conf_extraopts:"default=always"`
+	Method            string            `conf:"method" conf_extraopts:"default=GET"`
+	Jobs              []string          `conf:"jobs"`
+	ExtraHeaders      map[string]string `conf:"extra_headers"`
+	InsecureTLS       bool              `conf:"insecure_tls" conf_extraopts:"default=false"`
+	StatusParams      bool              `conf:"status_params" conf_extraopts:"default=true"`
+	ConnectionTimeout time.Duration     `conf:"connection_timeout" conf_extraopts:"default=10"`
+}
+
+type reportConf struct {
+	Enabled        bool               `conf:"enabled" conf_extraopts:"default=false"`
+	OnlyOnErrors   bool               `conf:"only_on_errors" conf_extraopts:"default=false"`
+	IncludeTargets bool               `conf:"include_targets" conf_extraopts:"default=true"`
+	StateFile      string             `conf:"state_file" conf_extraopts:"default=/tmp/nxs-backup.report.state"`
+	Telegram       reportTelegramConf `conf:"telegram"`
+}
+
+type reportTelegramConf struct {
+	BotToken            string `conf:"bot_token"`
+	ChatID              string `conf:"chat_id"`
+	ThreadID            *int64 `conf:"thread_id"`
+	APIURL              string `conf:"api_url" conf_extraopts:"default=https://api.telegram.org"`
+	InsecureTLS         bool   `conf:"insecure_tls" conf_extraopts:"default=false"`
+	DisableNotification bool   `conf:"disable_notification" conf_extraopts:"default=false"`
 }
 
 type mailConf struct {
@@ -347,6 +383,19 @@ notifications:
     recipients:
     - root@localhost
   webhooks: []
+#  report:
+#    enabled: true
+#    only_on_errors: false
+#    include_targets: true
+#    state_file: /tmp/nxs-backup.report.state
+#    telegram:
+#      bot_token: 'ENV:TG_BOT_TOKEN'
+#      chat_id: '-1001234567890'
+#      thread_id: 42
+#  heartbeats:
+#  - name: kuma
+#    url: https://kuma.example.com/api/push/abc123
+#    trigger: always
 
 storage_connects: []
 
