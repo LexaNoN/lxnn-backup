@@ -25,6 +25,8 @@ type Opts struct {
 	OnlyOnErrors   bool
 	IncludeTargets bool
 	Sender         Sender
+	// AlertSender receives the report only if the run has problems. Optional.
+	AlertSender Sender
 }
 
 // Report collects results of the performed jobs and sends the summary
@@ -93,21 +95,31 @@ func (r *Report) Perform(logCh chan logger.LogRecord, md *metrics.Data, generalE
 
 	d := r.collect(md, generalErr)
 
+	msgs := buildMessages(d)
+
+	if r.opts.AlertSender != nil && d.hasProblems() {
+		send(r.opts.AlertSender, msgs, logCh)
+	}
+
 	if r.opts.OnlyOnErrors && !d.hasProblems() {
 		logCh <- logger.Log("", "").Debug("Final report is not sent: no errors occurred.")
 	} else {
-		for _, m := range buildMessages(d) {
-			if err := r.opts.Sender.Send(m); err != nil {
-				logCh <- logger.Log("", "").Errorf("Failed to send final report via %s: %v", r.opts.Sender.Name(), err)
-				break
-			}
-		}
-		logCh <- logger.Log("", "").Debugf("Final report sent via %s.", r.opts.Sender.Name())
+		send(r.opts.Sender, msgs, logCh)
 	}
 
 	if err := r.prevState.save(r.opts.StateFile, md); err != nil {
 		logCh <- logger.Log("", "").Errorf("Failed to save final report state file: %v", err)
 	}
+}
+
+func send(s Sender, msgs []string, logCh chan logger.LogRecord) {
+	for _, m := range msgs {
+		if err := s.Send(m); err != nil {
+			logCh <- logger.Log("", "").Errorf("Failed to send final report via %s: %v", s.Name(), err)
+			return
+		}
+	}
+	logCh <- logger.Log("", "").Debugf("Final report sent via %s.", s.Name())
 }
 
 func (r *Report) collect(md *metrics.Data, generalErr error) reportData {
@@ -121,10 +133,6 @@ func (r *Report) collect(md *metrics.Data, generalErr error) reportData {
 		GeneralErr:     generalErr,
 		StateErr:       r.stateErr,
 		IncludeTargets: r.opts.IncludeTargets,
-	}
-
-	if md != nil {
-		d.UpdateAvailable = md.NewVersionAvailable == 1
 	}
 
 	for _, res := range r.jobs {
