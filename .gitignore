@@ -19,3 +19,4 @@ nxs-backup.code-workspace
 version.go
 .docker/Dockerfile-local
 vendor
+/.deploy/dist

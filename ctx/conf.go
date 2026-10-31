@@ -78,6 +78,9 @@ type reportConf struct {
 	IncludeTargets bool               `conf:"include_targets" conf_extraopts:"default=true"`
 	StateFile      string             `conf:"state_file" conf_extraopts:"default=/tmp/nxs-backup.report.state"`
 	Telegram       reportTelegramConf `conf:"telegram"`
+	// AlertsTelegram is an optional second channel that gets the report
+	// only if the run has problems. Unset fields are taken from Telegram.
+	AlertsTelegram reportTelegramConf `conf:"alerts_telegram"`
 }
 
 type reportTelegramConf struct {
@@ -392,6 +395,8 @@ notifications:
 #      bot_token: 'ENV:TG_BOT_TOKEN'
 #      chat_id: '-1001234567890'
 #      thread_id: 42
+#    alerts_telegram:
+#      chat_id: '-1009876543210'
 #  heartbeats:
 #  - name: kuma
 #    url: https://kuma.example.com/api/push/abc123

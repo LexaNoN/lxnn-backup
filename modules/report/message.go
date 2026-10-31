@@ -22,7 +22,6 @@ const (
 	warnMark   = "⚠️"
 	errMark    = "‼️"
 	reportMark = "📦"
-	updateMark = "🆕"
 )
 
 type targetInfo struct {
@@ -71,7 +70,6 @@ type reportData struct {
 	JobsSkipped     int
 	TargetsOk       int
 	TargetsFailed   int
-	UpdateAvailable bool
 	IncludeTargets  bool
 }
 
@@ -139,9 +137,6 @@ func headBlock(d reportData) block {
 
 	if d.Version != "" {
 		b.lines = append(b.lines, fmt.Sprintf("*nxs\\-backup:* %s", esc(d.Version)))
-	}
-	if d.UpdateAvailable {
-		b.lines = append(b.lines, fmt.Sprintf("%s A new version of nxs\\-backup is available", updateMark))
 	}
 	if d.StateErr != nil {
 		b.lines = append(b.lines, fmt.Sprintf("%s Backups growth is unavailable: %s", warnMark, esc(oneLine(d.StateErr.Error()))))

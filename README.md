@@ -168,6 +168,11 @@ notifications:
       api_url: https://api.telegram.org
       insecure_tls: false
       disable_notification: false
+    # optional second channel, gets the report only if the run finished with errors.
+    # bot_token and api_url are taken from the `telegram` section above if unset
+    alerts_telegram:
+      chat_id: '-1009876543210'
+      thread_id: 7
 ```
 
 Notes:
